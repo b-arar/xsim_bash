@@ -1,0 +1,136 @@
+# MIT License
+#
+# Copyright (c) 2024 B. Arar
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+tb_is_systemverilog=false;
+tb_is_verilog=false;
+to_delete=false;
+to_log="";
+file_name=""
+extension=""
+
+while true; do
+    case "${1}" in
+        --help | -h)
+            echo "
+ Usage: viv_sim [name of design]_tb.[s]v 
+
+ The files are passed as they are to Vivado, .sv does not affect \
+working of the script.
+
+ Options:
+
+    --help/-h   View this help text.
+
+    --nolog     Passed to vivado utilities to suppress some log files.
+
+    --delete    Deletes simulation files after run.
+            ";
+            exit
+            ;;
+        --nolog)
+            to_log="--nolog";
+            shift
+            ;;
+        --delete)
+            to_delete=true;
+            shift
+            ;;
+        *_tb.sv)
+            tb_is_systemverilog=true
+            file_name="${1%_*}"
+            extension="${1##*_}"
+            shift
+            ;;
+        *_tb.v)
+            tb_is_verilog=true
+            file_name="${1%_*}"
+            extension="${1##*_}"
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+dut_name=""
+
+echo Attempting to simulate ${file_name}_${extension}..
+if ! [ -f "${file_name}_${extension}" ]; then
+    echo No testbench with name ${file_name}_${extension} exists, aborting..;
+    exit 1;
+else
+    echo Testbench ${file_name}_${extension} located.
+fi 
+if [ -f "${file_name}.v" ]; then
+    dut_name="${file_name}.v";
+elif [ -f "${file_name}.sv" ]; then
+    dut_name="${file_name}.sv";
+else
+    echo No module exists with name ${file_name}.v or ${file_name}.sv, aborting..;
+    exit 2;
+fi
+
+
+echo DUT located: $dut_name;
+
+echo "Launching xvlog.."
+
+xvlog "${file_name}_${extension}" "${dut_name}" $to_log;
+
+if ! [ $? -eq 0 ]; then
+    echo "xvlog failed. Aborting.."
+    exit 3;
+fi
+
+echo "Launching xelab.."
+
+xelab ${file_name}_tb $to_log
+
+if ! [ $? -eq 0 ]; then
+    echo "xelab failed. Aborting.."
+    exit 4;
+fi
+
+echo "Launching xsim.."
+
+xsim ${file_name}_tb -R $to_log;
+
+if ! [ $? -eq 0 ]; then
+    echo "xsim failed. Aborting.."
+    exit 5;
+fi
+
+
+if [ $to_delete ]; then
+    echo Deleting files..;
+    rm -r xsim.dir
+    rm xvlog.pb
+    rm xelab.pb
+    if [ -f "xvlog.log" ]; then rm xvlog.log; fi
+    for file in * ; do
+        if ! [ ${file%xsim*} ]; then
+            rm $file;
+        fi
+    done
+fi
