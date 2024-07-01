@@ -28,6 +28,7 @@ to_delete=false;
 to_log="";
 file_name="";
 extension="";
+topname="";
 
 while true; do
     case "${1}" in
@@ -59,12 +60,14 @@ recursively detected and included in the simulation command.
             tb_is_systemverilog=true
             sv="--sv"
             top="${1}"
+            topname="${1##*/}"
             shift
             ;;
         *.v)
             tb_is_verilog=true
             sv=""
             top="${1}"
+            topname="${1##*/}"
             shift
             ;;
         *)
@@ -113,7 +116,7 @@ fi
 
 echo "Launching xelab.."
 
-xelab ${top%.*} $to_log
+xelab ${topname%.*} $to_log
 
 if ! [ $? -eq 0 ]; then
     echo "xelab failed. Aborting.."
@@ -122,7 +125,7 @@ fi
 
 echo "Launching xsim.."
 
-xsim ${top%.*} -R $to_log;
+xsim ${topname%.*} -R $to_log;
 
 if ! [ $? -eq 0 ]; then
     echo "xsim failed. Aborting.."
