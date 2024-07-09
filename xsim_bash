@@ -26,9 +26,11 @@ tb_is_verilog=false;
 sv="";
 to_delete=false;
 to_log="";
+uvm_f="";
 file_name="";
 extension="";
 topname="";
+ignore_inc=false;
 
 while true; do
     case "${1}" in
@@ -45,6 +47,8 @@ recursively detected and included in the simulation command.
     --help/-h   View this help text.
     --nolog     Passed to vivado utilities to suppress some log files.
     --delete    Deletes simulation files after run. 
+    --uvm       Enables uvm support
+    --noinc     Ignores files placed in any subdirectory called "include"
             ";
             exit
             ;;
@@ -56,11 +60,19 @@ recursively detected and included in the simulation command.
             to_delete=true;
             shift
             ;;
+        --uvm)
+            uvm_f="-L uvm";
+            shift
+            ;;
+        --noinc)
+            ignore_inc=true;
+            shift
+            ;;
         *.sv)
-            tb_is_systemverilog=true
-            sv="--sv"
-            top="${1}"
-            topname="${1##*/}"
+            tb_is_systemverilog=true;
+            sv="--sv";
+            top="${1}";
+            topname="${1##*/}";
             shift
             ;;
         *.v)
@@ -83,11 +95,14 @@ else
     exit 1;
 fi
 
+
 list=$(ls -R)
 
 current_subdir=""
 
-files=""
+files="$top"
+
+packages=""
 
 for item in $list;
 do
@@ -97,17 +112,32 @@ do
     if [[ $item == *\: && $item != .: ]]; then
         current_subdir=${item%?}
     elif [[ $item == *.sv || $item == *.v ]]; then
+        full_item=""
+        if [[ $current_subdir == *"/include" && $ignore_inc == true ]]; then
+            continue;
+        fi
         if [[ $current_subdir != "" ]]; then
-            files="$files $current_subdir/$item"
+            full_item="$current_subdir/$item"
         else
-            files="$files $item"
+            full_item="$item"
+        fi
+        if [[ $item == *"_pkg"* ]]; then
+            packages="$packages $full_item"
+        else
+            files="$files $full_item"
         fi
     fi
 done
 
+files="$packages $files"
+
+if [[ $uvm_f != "" ]]; then
+    echo UVM enabled..
+    echo files: $files
+fi
 echo "Attempting to launching xvlog.."
 
-xvlog $top $files $to_log $sv;
+xvlog $files $to_log $sv $uvm_f;
 
 if ! [ $? -eq 0 ]; then
     echo "xvlog failed. Aborting.."
@@ -116,7 +146,7 @@ fi
 
 echo "Launching xelab.."
 
-xelab ${topname%.*} $to_log
+xelab ${topname%.*} $to_log $uvm_f
 
 if ! [ $? -eq 0 ]; then
     echo "xelab failed. Aborting.."
